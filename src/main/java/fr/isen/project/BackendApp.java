@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.annotation.JsonAutoDetect.Visibility;
 
 import fr.isen.project.model.Commande;
+import fr.isen.project.model.LigneCommande;
 import fr.isen.project.service.MenuService;
 import fr.isen.project.service.impl.MenuServiceImpl;
 import fr.isen.project.service.CommandeService;
@@ -18,70 +19,77 @@ import java.nio.file.Files;
 import java.util.Map;
 import java.util.HashMap;
 
-/**
- * Application Backend ISEN - Port 8080
- */
 public class BackendApp {
     public static void main(String[] args) {
 
-        // 1. CONFIGURATION JACKSON
         ObjectMapper mapper = new ObjectMapper();
         mapper.setVisibility(PropertyAccessor.FIELD, Visibility.ANY);
 
-        // 2. INITIALISATION DES COUCHES
         MenuService menuService = new MenuServiceImpl();
         CommandeService cmdService = new CommandeServiceImpl();
 
-        // 3. BASE DE DONNÉES DES PROMOS
+        // --- 1. LISTE DES CODES PROMOS REALISTES ---
         Map<String, Double> promos = new HashMap<>();
-        promos.put("VIP2025", 0.20);
+        promos.put("VIP2025", 0.20);      // 20% (Code VIP)
+        promos.put("BIENVENUE", 0.10);    // 10% (Nouveau client)
+        promos.put("ISEN_STUDENT", 0.15); // 15% (Etudiants)
+        promos.put("QR_FLASH", 0.05);     // 5% (Le code du QR Code)
 
-        // 4. DÉMARRAGE DU SERVEUR
         Javalin app = Javalin.create(config -> {
             config.jsonMapper(new JavalinJackson(mapper, true));
             config.bundledPlugins.enableCors(cors -> cors.addRule(it -> it.anyHost()));
             config.staticFiles.add("public", Location.CLASSPATH);
         }).start(8080);
 
-        System.out.println("--- Backend ISEN opérationnel sur http://localhost:8080 ---");
+        System.out.println("--- Backend ISEN DÉMARRÉ ---");
 
-        // --- ROUTES API ---
-
-        // MENU (Double route pour sécurité)
         app.get("/categories", ctx -> ctx.json(menuService.getAllCategories()));
         app.get("/menu", ctx -> ctx.json(menuService.getAllCategories()));
 
-        // PROMOS
+        // API Vérification Promo
         app.get("/api/promo/{code}", ctx -> {
-            String codeRecu = ctx.pathParam("code");
-            if (promos.containsKey(codeRecu)) {
-                ctx.json(Map.of("valide", true, "reduction", promos.get(codeRecu)));
+            String code = ctx.pathParam("code").toUpperCase(); // On gère les majuscules
+            if (promos.containsKey(code)) {
+                ctx.json(Map.of("valide", true, "reduction", promos.get(code)));
             } else {
                 ctx.status(404).json(Map.of("valide", false));
             }
         });
 
-        // IMAGES : CHEMIN SIMPLE (C:/images/)
-        // Cela contourne le bug de l'accent 'yncréa'
+        // IMAGES (Ton chemin corrigé)
         app.get("/images/{filename}", ctx -> {
             String filename = ctx.pathParam("filename");
-            File file = new File("C:/images/" + filename); // <--- MODIFICATION ICI
+            File file = new File("borneasie-backend/src/main/resources/public/images/" + filename);
 
             if (file.exists()) {
-                ctx.contentType("image/jpeg");
+                if (filename.toLowerCase().endsWith(".png")) {
+                    ctx.contentType("image/png");
+                } else {
+                    ctx.contentType("image/jpeg");
+                }
                 ctx.result(Files.newInputStream(file.toPath()));
             } else {
-                System.err.println("❌ Image introuvable dans C:/images/ : " + filename);
+                System.err.println("❌ Introuvable : " + file.getAbsolutePath());
                 ctx.status(404).result("Image non trouvée");
             }
         });
 
-        // COMMANDE
         app.post("/commande", ctx -> {
             try {
                 Commande cmd = ctx.bodyAsClass(Commande.class);
-                int idGenere = cmdService.enregistrerCommande(cmd);
-                ctx.status(201).json(Map.of("id", idGenere, "message", "Succès"));
+                // Log Console
+                double totalLog = 0;
+                if (cmd.ligneCommande != null) {
+                    for (LigneCommande l : cmd.ligneCommande) {
+                        double p = l.plat.prix;
+                        if (l.options != null && l.options.contains("Cantonais")) p += 2.0;
+                        totalLog += p * l.quantite;
+                    }
+                }
+                System.out.println("📥 Commande reçue : " + cmd.nomClient + " | Total env: " + totalLog + "€");
+
+                int id = cmdService.enregistrerCommande(cmd);
+                ctx.status(201).json(Map.of("id", id, "message", "Succès"));
             } catch (Exception e) {
                 e.printStackTrace();
                 ctx.status(500).result("Erreur: " + e.getMessage());
