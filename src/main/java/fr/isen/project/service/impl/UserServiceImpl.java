@@ -2,7 +2,7 @@ package fr.isen.project.service.impl; // <--- Indique le dossier
 
 // Imports nécessaires pour que Java comprenne les autres fichiers
 import fr.isen.project.model.User;
-import fr.isen.projet.service.UserService;
+import fr.isen.project.service.UserService;
 
 // Imports SQL
 import java.sql.Connection;

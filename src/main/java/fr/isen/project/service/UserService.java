@@ -1,4 +1,4 @@
-package fr.isen.projet.service; // <--- Indique le dossier
+package fr.isen.project.service; // <--- Indique le dossier
 
 import fr.isen.project.model.User; // Importe le User qu'on a créé au-dessus
 import java.util.List;
